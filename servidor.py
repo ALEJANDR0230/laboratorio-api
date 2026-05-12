@@ -1,7 +1,7 @@
 """
-servidor.py v2.2 — API Flask para procesar PDFs de laboratorio
+servidor.py v3.0 — API Flask para procesar PDFs de laboratorio
 ==============================================================
-Basado 100% en tu código original + mejoras de limpieza y robustez.
+Versión mejorada y más robusta (basada en tu código original + mejoras importantes)
 """
 
 import os
@@ -130,7 +130,7 @@ def extraer_paciente(texto):
 
 
 # =====================================================
-# 3. DETECTOR UNIVERSAL DE ANALITOS (ORIGINAL + MEJORAS)
+# 3. DETECTOR DE ANALITOS (ROBUSTO + MEJORADO)
 # =====================================================
 
 UNIDADES = (
@@ -158,7 +158,6 @@ PALABRAS_RUIDO = {
     "de","del","al","la","el","los","las","para","que","con","por","un","una",
     "optimal","moderate","high","low","desirable","target","category","risk",
     "based","patients","treatment","depending","above","below","within","outside",
-    "menos","mayor","menor","de","del","al","con","para","que","niveles",
 }
 
 PREFIJOS_RUIDO = (
@@ -307,6 +306,9 @@ SINONIMOS_ANALITO = {
     "creatinine":          "CREATININA",
     "uric acid":           "ACIDO URICO",
     "albumin":             "ALBUMINA",
+    "tsh":                 "TSH",
+    "t4 libre":            "T4 LIBRE",
+    "t3 libre":            "T3 LIBRE",
 }
 
 def extraer_analitos_fallback(texto, ya_encontrados):
@@ -329,6 +331,9 @@ def extraer_analitos_fallback(texto, ya_encontrados):
         ("APOLIPOPROTEINA B",     r"Apolipoprotein B\s+([0-9]+(?:[.,][0-9]+)?)\s*mg/dL", "mg/dL"),
         ("TSH",                   r"TSH\s+([0-9]+(?:[.,][0-9]+)?)\s*(?:mUI/L|µUI/mL|uIU/mL)", "mUI/L"),
         ("T4 LIBRE",              r"T4\s+(?:LIBRE|libre|Free)\s+([0-9]+(?:[.,][0-9]+)?)\s*(?:ng/dL|pmol/L)", "ng/dL"),
+        ("T3 LIBRE",              r"T3\s+(?:LIBRE|libre|Free)\s+([0-9]+(?:[.,][0-9]+)?)\s*(?:ng/dL|pmol/L)", "ng/dL"),
+        ("VITAMINA D",            r"VITAMINA\s*D\s+([0-9]+(?:[.,][0-9]+)?)\s*(?:ng/mL|nmol/L)", "ng/mL"),
+        ("INSULINA",              r"INSULINA\s+([0-9]+(?:[.,][0-9]+)?)\s*(?:µUI/mL|uIU/mL)", "µUI/mL"),
     ]
 
     for nombre, patron, unidad in patrones_especiales:
@@ -409,7 +414,7 @@ def ensamblar(nombre_archivo, paginas, paciente, analitos, secciones):
 # =====================================================
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "mensaje": "API de laboratorio v2.2 activa"}), 200
+    return jsonify({"status": "ok", "mensaje": "API de laboratorio v3.0 activa"}), 200
 
 
 @app.route("/procesar-pdf", methods=["POST"])
@@ -452,5 +457,5 @@ def procesar_pdf():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n🔬 Servidor v2.2 iniciando en puerto {port}...")
+    print(f"\n🔬 Servidor v3.0 iniciando en puerto {port}...")
     app.run(host="0.0.0.0", port=port, debug=False)
