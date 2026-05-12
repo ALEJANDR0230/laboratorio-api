@@ -1,8 +1,7 @@
 """
-servidor.py v2.0 — API Flask para procesar PDFs de laboratorio
+servidor.py v2.1 — API Flask para procesar PDFs de laboratorio
 ==============================================================
-Versión mejorada: más inteligente, mejor detección de rangos,
-más robusta y con estructura limpia.
+Versión mejorada: combina robustez del original + mejoras de estructura y precisión.
 """
 
 import os
@@ -35,7 +34,7 @@ def parsear_valor(raw):
 
 
 # =====================================================
-# 1. EXTRACCIÓN DE TEXTO
+# 1. EXTRACCIÓN DE TEXTO (mejorada con tablas)
 # =====================================================
 def extraer_texto(ruta):
     paginas = []
@@ -57,7 +56,7 @@ def extraer_texto(ruta):
 
 
 # =====================================================
-# 2. EXTRACCIÓN DE DATOS DEL PACIENTE (MEJORADA)
+# 2. EXTRACCIÓN DE PACIENTE (mejorada)
 # =====================================================
 PATRONES_PACIENTE = {
     "folio": [
@@ -99,13 +98,57 @@ def extraer_paciente(texto):
 
 
 # =====================================================
-# 3. DETECTOR DE ANALITOS MEJORADO (v2.0)
+# 3. FILTRO DE RUIDO (del original - muy importante)
+# =====================================================
+PALABRAS_RUIDO = {
+    "folio", "paciente", "sexo", "edad", "médico", "medico", "fecha", "código", "codigo",
+    "método", "metodo", "referencias", "referencia", "importante", "nuestros", "estudios",
+    "cuentan", "autenticador", "responsable", "sanitario", "certificó", "certfico",
+    "laboratorio", "sauces", "matríz", "matriz", "trujano", "llano", "calle", "oaxaca",
+    "biomedicina", "molecular", "especialidad", "hematología", "hematologia",
+    "microbiología", "microbiologia", "instituto", "anton", "leeuwenhoek", "página", "pagina",
+    "pag", "note", "result", "range", "status", "method", "reference", "normal", "alto",
+    "bajo", "limite", "deseable", "optimo", "óptimo", "riesgo", "medio", "sin",
+    "moderado", "nivel", "niveles", "menos", "mayor", "menor", "igual", "adelante",
+    "ingesta", "técnica", "tecnica", "muestra", "reporte", "emision", "emisión",
+    "quest", "diagnostics", "specimen", "requisition", "collected", "received",
+    "reported", "performing", "laboratory", "director", "page", "end", "report",
+    "final", "information", "client", "ordering", "physician", "dob", "age", "sex",
+    "de", "del", "al", "la", "el", "los", "las", "para", "que", "con", "por", "un", "una",
+    "optimal", "moderate", "high", "low", "desirable", "target", "category", "risk",
+    "based", "patients", "treatment", "depending", "above", "below", "within", "outside",
+}
+
+PREFIJOS_RUIDO = (
+    "menos de ", "mayor de ", "menor de ", "de 1 ", "de 3 ", "de 0 ",
+    "a desirable", "risk cat", "reference", "método:", "metodo:",
+    "niveles de ", "nivel de ", "nota:", "note:", "importante:",
+    "150 -", "200 -", "500 ", "130 ", "110 ", "100 -",
+    "riesgo ", "moderate ", "optimal ", "high >", "low <",
+)
+
+def nombre_es_ruido(nombre):
+    nombre_lower = nombre.lower().strip()
+    if len(nombre_lower) < 3:
+        return True
+    for pref in PREFIJOS_RUIDO:
+        if nombre_lower.startswith(pref.lower()):
+            return True
+    if re.match(r"^[\d<>]", nombre.strip()):
+        return True
+    palabras = nombre_lower.split()
+    ruido = sum(1 for p in palabras if p in PALABRAS_RUIDO)
+    return ruido >= len(palabras)
+
+
+# =====================================================
+# 4. DETECTOR DE ANALITOS (combinado)
 # =====================================================
 def extraer_analitos_v2(texto_completo, paginas):
     resultados = []
     nombres_vistos = set()
 
-    # Primero intentamos con tablas (más preciso)
+    # Primero por tablas
     for pagina in paginas:
         for tabla in pagina.get("tablas", []):
             for fila in tabla:
@@ -113,12 +156,13 @@ def extraer_analitos_v2(texto_completo, paginas):
                     nombre = str(fila[0] or "").strip()
                     valor = str(fila[1] or "").strip()
                     if nombre and re.match(r'^[A-ZÁÉÍÓÚÑ]', nombre) and re.match(r'[\d<>]', valor):
-                        analito = procesar_fila(nombre, valor, fila)
-                        if analito and analito["analito"] not in nombres_vistos:
-                            nombres_vistos.add(analito["analito"])
-                            resultados.append(analito)
+                        if not nombre_es_ruido(nombre):
+                            analito = procesar_fila(nombre, valor, fila)
+                            if analito and analito["analito"] not in nombres_vistos:
+                                nombres_vistos.add(analito["analito"])
+                                resultados.append(analito)
 
-    # Luego método línea por línea mejorado
+    # Luego por líneas con filtro fuerte
     for linea in texto_completo.split("\n"):
         linea = linea.strip()
         if len(linea) < 6:
@@ -138,7 +182,7 @@ def detectar_analito_linea(linea):
         return None
 
     nombre = m.group(1).strip()
-    if len(nombre) < 4 or any(x in nombre.lower() for x in ["nivel", "rango", "referencia", "nota"]):
+    if nombre_es_ruido(nombre):
         return None
 
     valor_raw = m.group(2).strip()
@@ -174,7 +218,7 @@ def procesar_fila(nombre, valor, fila):
 
 
 # =====================================================
-# 4. ENSAMBLAR RESULTADO
+# 5. ENSAMBLAR RESULTADO
 # =====================================================
 def ensamblar(nombre_archivo, paginas, paciente, analitos):
     return {
@@ -198,11 +242,11 @@ def ensamblar(nombre_archivo, paginas, paciente, analitos):
 
 
 # =====================================================
-# 5. ENDPOINTS
+# 6. ENDPOINTS
 # =====================================================
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "mensaje": "API de laboratorio v2.0 activa"}), 200
+    return jsonify({"status": "ok", "mensaje": "API de laboratorio v2.1 activa"}), 200
 
 
 @app.route("/procesar-pdf", methods=["POST"])
@@ -233,5 +277,5 @@ def procesar_pdf():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n🔬 Servidor v2.0 iniciando en puerto {port}...")
+    print(f"\n🔬 Servidor v2.1 iniciando en puerto {port}...")
     app.run(host="0.0.0.0", port=port)
